@@ -1,17 +1,6 @@
 import { PageHeader } from '../PageHeader'
-
-type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
-
-interface Finding {
-  id: string
-  title: string
-  severity: Severity
-  agent: string
-  location: string
-  corroborations: number
-}
-
-const findings: Finding[] = []
+import { useFindings } from '../../lib/yjs/useFindings'
+import type { Severity } from '../../lib/yjs/types'
 
 const severityClass: Record<Severity, string> = {
   critical: 'bg-rose-500/15 text-rose-300 ring-rose-500/30',
@@ -22,6 +11,8 @@ const severityClass: Record<Severity, string> = {
 }
 
 export function FindingsPage() {
+  const { findings } = useFindings()
+
   return (
     <>
       <PageHeader

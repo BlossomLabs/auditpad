@@ -8,6 +8,15 @@ import { DashboardPage } from './app/routes/DashboardPage'
 import { AuditPage } from './app/routes/AuditPage'
 import { FindingsPage } from './app/routes/FindingsPage'
 import { NotFoundPage } from './app/routes/NotFoundPage'
+import { configureMonacoLoader } from './lib/yjs/monacoLoader'
+import { LocalProvider } from './lib/yjs/Provider'
+import { setLocalUser } from './lib/yjs/usePresence'
+
+configureMonacoLoader()
+
+const provider = new LocalProvider()
+provider.connect()
+setLocalUser()
 
 const router = createBrowserRouter([
   {

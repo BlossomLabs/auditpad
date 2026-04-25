@@ -1,15 +1,55 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Editor, { type OnMount } from '@monaco-editor/react'
+import type { editor } from 'monaco-editor'
+import { MonacoBinding } from 'y-monaco'
+
 import { PageHeader } from '../PageHeader'
 import { sampleContract } from '../../lib/sampleContract'
 import { registerSolidityLanguage } from '../../lib/monacoSolidity'
+import { awareness, yContract } from '../../lib/yjs/doc'
+import { useFindings } from '../../lib/yjs/useFindings'
+import { usePresence } from '../../lib/yjs/usePresence'
+import type { Finding, PresenceUser, Severity } from '../../lib/yjs/types'
+
+const sidebarSeverityClass: Record<Severity, string> = {
+  critical: 'bg-rose-500/15 text-rose-300 ring-rose-500/30',
+  high: 'bg-orange-500/15 text-orange-300 ring-orange-500/30',
+  medium: 'bg-amber-500/15 text-amber-300 ring-amber-500/30',
+  low: 'bg-sky-500/15 text-sky-300 ring-sky-500/30',
+  info: 'bg-zinc-500/15 text-zinc-300 ring-zinc-500/30',
+}
 
 export function AuditPage() {
-  const [code, setCode] = useState(sampleContract)
+  const [editorInstance, setEditorInstance] =
+    useState<editor.IStandaloneCodeEditor | null>(null)
+  const { findings } = useFindings()
+  const peers = usePresence()
 
-  const handleMount: OnMount = (_editor, monaco) => {
+  const handleMount: OnMount = (instance, monaco) => {
     registerSolidityLanguage(monaco)
+    setEditorInstance(instance)
   }
+
+  useEffect(() => {
+    if (!editorInstance) return
+    const model = editorInstance.getModel()
+    if (!model) return
+
+    if (yContract.length === 0) {
+      yContract.insert(0, sampleContract)
+    }
+
+    const binding = new MonacoBinding(
+      yContract,
+      model,
+      new Set([editorInstance]),
+      awareness,
+    )
+
+    return () => {
+      binding.destroy()
+    }
+  }, [editorInstance])
 
   return (
     <>
@@ -19,6 +59,7 @@ export function AuditPage() {
         description="Target contract under audit. Agents will stream findings to the CRDT as they execute."
         actions={
           <>
+            <PresenceChips peers={peers} />
             <button
               type="button"
               className="inline-flex items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elev)] px-3 py-1.5 text-sm text-[var(--color-fg-muted)] transition hover:text-white"
@@ -52,8 +93,7 @@ export function AuditPage() {
               height="100%"
               defaultLanguage="solidity"
               language="solidity"
-              value={code}
-              onChange={(value) => setCode(value ?? '')}
+              defaultValue=""
               onMount={handleMount}
               theme="vs-dark"
               options={{
@@ -77,17 +117,19 @@ export function AuditPage() {
             Live findings
           </div>
           <div className="flex-1 overflow-auto px-4 py-3 text-sm text-[var(--color-fg-muted)]">
-            <p className="text-xs leading-relaxed">
-              No findings yet. Once the agents are dispatched they will gossip
-              CRDT deltas and merged findings will appear here, grouped by
-              severity.
-            </p>
-
-            <div className="mt-6 space-y-2">
-              <SkeletonFinding />
-              <SkeletonFinding />
-              <SkeletonFinding />
-            </div>
+            {findings.length === 0 ? (
+              <p className="text-xs leading-relaxed">
+                No findings yet. Once the agents are dispatched they will gossip
+                CRDT deltas and merged findings will appear here, grouped by
+                severity.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {findings.map((f) => (
+                  <SidebarFinding key={f.id} finding={f} />
+                ))}
+              </ul>
+            )}
           </div>
         </aside>
       </div>
@@ -95,12 +137,46 @@ export function AuditPage() {
   )
 }
 
-function SkeletonFinding() {
+function SidebarFinding({ finding }: { finding: Finding }) {
   return (
-    <div className="rounded-md border border-dashed border-[var(--color-border-soft)] p-3">
-      <div className="h-2 w-1/3 rounded bg-[var(--color-bg-soft)]" />
-      <div className="mt-2 h-2 w-2/3 rounded bg-[var(--color-bg-soft)]" />
-      <div className="mt-1.5 h-2 w-1/2 rounded bg-[var(--color-bg-soft)]" />
+    <li className="rounded-md border border-[var(--color-border-soft)] bg-[var(--color-bg-elev)] p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span
+          className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider ring-1 ${sidebarSeverityClass[finding.severity]}`}
+        >
+          {finding.severity}
+        </span>
+        <span className="font-mono text-[10px] text-[var(--color-fg-subtle)]">
+          {finding.location}
+        </span>
+      </div>
+      <div className="mt-2 text-xs font-medium text-white">{finding.title}</div>
+      <div className="mt-1 text-[11px] text-[var(--color-fg-muted)]">
+        {finding.agent}
+        {finding.corroborations > 0 && (
+          <span className="ml-2 text-[var(--color-fg-subtle)]">
+            · {finding.corroborations}× corroborated
+          </span>
+        )}
+      </div>
+    </li>
+  )
+}
+
+function PresenceChips({ peers }: { peers: PresenceUser[] }) {
+  if (peers.length === 0) return null
+  return (
+    <div className="mr-1 flex items-center -space-x-1.5">
+      {peers.map((peer) => (
+        <span
+          key={peer.id}
+          title={peer.name}
+          className="inline-flex size-7 items-center justify-center rounded-full text-[10px] font-semibold uppercase text-white ring-2 ring-[var(--color-bg)]"
+          style={{ backgroundColor: peer.color }}
+        >
+          {peer.name.slice(0, 2)}
+        </span>
+      ))}
     </div>
   )
 }
